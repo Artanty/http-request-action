@@ -104,7 +104,7 @@ const request = async ({ method, instanceConfig, data, actions, options }) => {
     if (error.response) {
       actions.setFailed(JSON.stringify({ code: error.response.status, message: error.response.data }))
     } else if (error.request) {
-      actions.setFailed(JSON.stringify({ error: "no response received 2", message: error.message, errorFull: error }));
+      actions.setFailed(JSON.stringify({ error: "no response received", message: error.message, errorFull: error }));
     } else {
       actions.setFailed(JSON.stringify({ message: error.message, data }));
     }

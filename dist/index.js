@@ -28213,8 +28213,6 @@ module.exports = {
 
 
 const axios = __nccwpck_require__(7269);
-const FormData = __nccwpck_require__(6454);
-const fs = __nccwpck_require__(9896);
 const url = __nccwpck_require__(7016);
 const { GithubActions } = __nccwpck_require__(5695);
 const { convertToJSON, convertToFormData, retry } = __nccwpck_require__(425);
@@ -28231,8 +28229,6 @@ const CONTENT_TYPE_URLENCODED = 'application/x-www-form-urlencoded'
  * @param {string} param0.method HTTP Method
  * @param {axios.AxiosRequestConfig} param0.instanceConfig
  * @param {string} param0.data Request Body as string, default {}
- * @param {string} param0.files Map of Request Files (name: absolute path) as JSON String, default: {}
- * @param {string} param0.file Single request file (absolute path)
  * @param {GithubActions} param0.actions 
  * @param {{ 
  *  ignoredCodes: number[];
@@ -28244,7 +28240,7 @@ const CONTENT_TYPE_URLENCODED = 'application/x-www-form-urlencoded'
  *
  * @returns {Promise<axios.AxiosResponse>}
  */
-const request = async({ method, instanceConfig, data, files, file, actions, options }) => {
+const request = async ({ method, instanceConfig, data, actions, options }) => {
   actions.debug(`options: ${JSON.stringify(options)}`)
   
   try {
@@ -28256,33 +28252,6 @@ const request = async({ method, instanceConfig, data, files, file, actions, opti
 
     if (method === METHOD_GET) {
       data = undefined;
-    }
-
-    if (files && files !== '{}') {
-      let filesJson = convertToJSON(files)
-      let dataJson = convertToJSON(data)
-
-      if (Object.keys(filesJson).length > 0) {
-        try {
-          data = convertToFormData(dataJson, filesJson)
-        } catch(error) {
-          actions.setFailed(JSON.stringify({ message: `Unable to convert Data and Files into FormData: ${error.message}`, data: dataJson, files: filesJson }))
-          return
-        }
-
-        try {
-          instanceConfig = await updateConfig(instanceConfig, data)
-        } catch(error) {
-          actions.setFailed(JSON.stringify({ message: `Unable to read Content-Length: ${error.message}` }))
-          return
-        }
-      }
-    }
-
-    // Only consider file if neither data nor files provided
-    if ((!data || data === '{}') && (!files || files === '{}') && file) {
-      data = fs.createReadStream(file)
-      updateConfigForFile(instanceConfig, file, actions)
     }
 
     if (instanceConfig.headers[HEADER_CONTENT_TYPE] === CONTENT_TYPE_URLENCODED) {
@@ -28347,75 +28316,12 @@ const request = async({ method, instanceConfig, data, files, file, actions, opti
     if (error.response) {
       actions.setFailed(JSON.stringify({ code: error.response.status, message: error.response.data }))
     } else if (error.request) {
-      actions.setFailed(JSON.stringify({ error: "no response received 1", message: error.message, errorFull: error }));
+      actions.setFailed(JSON.stringify({ error: "no response received", message: error.message, errorFull: error }));
     } else {
       actions.setFailed(JSON.stringify({ message: error.message, data }));
     }
   }
 }
-
-/**
- * @param {{ baseURL: string; timeout: number; headers: { [name: string]: string } }} instanceConfig
- * @param {FormData} formData
- *
- * @returns {Promise<{ baseURL: string; timeout: number; headers: { [name: string]: string } }>}
- */
-const updateConfig = async (instanceConfig, formData) => {
-    const formHeaders = formData.getHeaders()
-    const contentType = formHeaders['content-type']
-
-    delete formHeaders['content-type']
-
-    return { 
-      ...instanceConfig, 
-      headers: { 
-        ...instanceConfig.headers, 
-        ...formHeaders,
-        'Content-Length': await contentLength(formData),
-        'Content-Type': contentType
-      }
-    }
-}
-
-/**
- * @param instanceConfig
- * @param filePath
- * @param {*} actions
- *
- * @returns {{ baseURL: string; timeout: number; headers: { [name: string]: string } }}
- */
-const updateConfigForFile = (instanceConfig, filePath, actions) => {
-  try {
-    const { size } = fs.statSync(filePath)
-
-    return {
-      ...instanceConfig,
-      headers: {
-        ...instanceConfig.headers,
-        'Content-Length': size,
-        'Content-Type': 'application/octet-stream'
-      }
-    }
-  } catch(error) {
-    actions.setFailed({ message: `Unable to read Content-Length: ${error.message}`, data, files })
-  }
-}
-
-/**
- * @param {FormData} formData
- *
- * @returns {Promise<number>}
- */
-const contentLength = (formData) => new Promise((resolve, reject) => {
-  formData.getLength((error, length) => {
-    if (error) {
-      reject(error)
-      return
-    }
-
-    resolve(length)
-  })
-})
 
 module.exports = {
   request,
@@ -35175,8 +35081,8 @@ if (!!core.getInput('retryWait')) {
   retryWait = parseInt(core.getInput('retryWait'))
 }
 
-const src_data = core.getInput('data') || '{}';
-const src_files = core.getInput('files') || '{}';
+const data = core.getInput('data') || '{}';
+const files = core.getInput('files') || '{}';
 const file = core.getInput('file')
 const responseFile = core.getInput('responseFile')
 const method = core.getInput('method') || METHOD_POST;
@@ -35212,7 +35118,7 @@ const options = {
   retryWait
 }
 
-request({ data: src_data, method, instanceConfig, files: src_files, file, actions, options }).then(response => {
+request({ data, method, instanceConfig, files, file, actions, options }).then(response => {
   if (response && typeof response == 'object') {
     handler.forEach(h => h(response))
   }
