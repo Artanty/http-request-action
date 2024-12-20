@@ -1,8 +1,6 @@
 'use strict'
 
 const axios = require('axios');
-const FormData = require('form-data');
-const fs = require('fs');
 const url = require('url');
 const { GithubActions } = require('./githubActions');
 const { convertToJSON, convertToFormData, retry } = require('./helper');
@@ -19,8 +17,6 @@ const CONTENT_TYPE_URLENCODED = 'application/x-www-form-urlencoded'
  * @param {string} param0.method HTTP Method
  * @param {axios.AxiosRequestConfig} param0.instanceConfig
  * @param {string} param0.data Request Body as string, default {}
- * @param {string} param0.files Map of Request Files (name: absolute path) as JSON String, default: {}
- * @param {string} param0.file Single request file (absolute path)
  * @param {GithubActions} param0.actions 
  * @param {{ 
  *  ignoredCodes: number[];
@@ -32,7 +28,7 @@ const CONTENT_TYPE_URLENCODED = 'application/x-www-form-urlencoded'
  *
  * @returns {Promise<axios.AxiosResponse>}
  */
-const request = async({ method, instanceConfig, data, files, file, actions, options }) => {
+const request = async ({ method, instanceConfig, data, actions, options }) => {
   actions.debug(`options: ${JSON.stringify(options)}`)
   
   try {
@@ -44,33 +40,6 @@ const request = async({ method, instanceConfig, data, files, file, actions, opti
 
     if (method === METHOD_GET) {
       data = undefined;
-    }
-
-    if (files && files !== '{}') {
-      let filesJson = convertToJSON(files)
-      let dataJson = convertToJSON(data)
-
-      if (Object.keys(filesJson).length > 0) {
-        try {
-          data = convertToFormData(dataJson, filesJson)
-        } catch(error) {
-          actions.setFailed(JSON.stringify({ message: `Unable to convert Data and Files into FormData: ${error.message}`, data: dataJson, files: filesJson }))
-          return
-        }
-
-        try {
-          instanceConfig = await updateConfig(instanceConfig, data)
-        } catch(error) {
-          actions.setFailed(JSON.stringify({ message: `Unable to read Content-Length: ${error.message}` }))
-          return
-        }
-      }
-    }
-
-    // Only consider file if neither data nor files provided
-    if ((!data || data === '{}') && (!files || files === '{}') && file) {
-      data = fs.createReadStream(file)
-      updateConfigForFile(instanceConfig, file, actions)
     }
 
     if (instanceConfig.headers[HEADER_CONTENT_TYPE] === CONTENT_TYPE_URLENCODED) {
@@ -135,75 +104,12 @@ const request = async({ method, instanceConfig, data, files, file, actions, opti
     if (error.response) {
       actions.setFailed(JSON.stringify({ code: error.response.status, message: error.response.data }))
     } else if (error.request) {
-      actions.setFailed(JSON.stringify({ error: "no response received", message: error.message }));
+      actions.setFailed(JSON.stringify({ error: "no response received 2", message: error.message, errorFull: error }));
     } else {
       actions.setFailed(JSON.stringify({ message: error.message, data }));
     }
   }
 }
-
-/**
- * @param {{ baseURL: string; timeout: number; headers: { [name: string]: string } }} instanceConfig
- * @param {FormData} formData
- *
- * @returns {Promise<{ baseURL: string; timeout: number; headers: { [name: string]: string } }>}
- */
-const updateConfig = async (instanceConfig, formData) => {
-    const formHeaders = formData.getHeaders()
-    const contentType = formHeaders['content-type']
-
-    delete formHeaders['content-type']
-
-    return { 
-      ...instanceConfig, 
-      headers: { 
-        ...instanceConfig.headers, 
-        ...formHeaders,
-        'Content-Length': await contentLength(formData),
-        'Content-Type': contentType
-      }
-    }
-}
-
-/**
- * @param instanceConfig
- * @param filePath
- * @param {*} actions
- *
- * @returns {{ baseURL: string; timeout: number; headers: { [name: string]: string } }}
- */
-const updateConfigForFile = (instanceConfig, filePath, actions) => {
-  try {
-    const { size } = fs.statSync(filePath)
-
-    return {
-      ...instanceConfig,
-      headers: {
-        ...instanceConfig.headers,
-        'Content-Length': size,
-        'Content-Type': 'application/octet-stream'
-      }
-    }
-  } catch(error) {
-    actions.setFailed({ message: `Unable to read Content-Length: ${error.message}`, data, files })
-  }
-}
-
-/**
- * @param {FormData} formData
- *
- * @returns {Promise<number>}
- */
-const contentLength = (formData) => new Promise((resolve, reject) => {
-  formData.getLength((error, length) => {
-    if (error) {
-      reject(error)
-      return
-    }
-
-    resolve(length)
-  })
-})
 
 module.exports = {
   request,

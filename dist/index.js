@@ -28347,7 +28347,7 @@ const request = async({ method, instanceConfig, data, files, file, actions, opti
     if (error.response) {
       actions.setFailed(JSON.stringify({ code: error.response.status, message: error.response.data }))
     } else if (error.request) {
-      actions.setFailed(JSON.stringify({ error: "no response received", message: error.message }));
+      actions.setFailed(JSON.stringify({ error: "no response received 1", message: error.message, errorFull: error }));
     } else {
       actions.setFailed(JSON.stringify({ message: error.message, data }));
     }
